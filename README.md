@@ -117,8 +117,8 @@ Después de `php artisan migrate:fresh --seed` quedan estos usuarios de demo:
 | Rol | Correo | Contraseña | Uso |
 |---|---|---|---|
 | ADMIN | admin@securewallet.test | Admin123*Secure | Endpoints `/admin/*` |
-| USER | manuel123@gmail.com | Manuel_123*Seguro | Usuario A, wallet con saldo |
-| USER | carmen123@gmail.com | Carmen_123*Seguro | Usuario B, pruebas BOLA/IDOR |
+| USER | manuel123@gmail.com | Manuel_123 | Usuario A, wallet con saldo |
+| USER | carmen123@gmail.com | Carmen_123 | Usuario B, pruebas BOLA/IDOR |
 
 MFA de prueba: la colección `EndPoints-Parte5` crea/usa un flujo real de MFA con `/auth/mfa/enable`, `/auth/mfa/enable/confirm` y `/auth/mfa/verify`. El secreto TOTP no se expone en JSON de perfil, usuarios ni auditoría.
 

@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'manuel123@gmail.com',
             'phone' => '70000002',
             'role' => 'USER',
-            'password' => 'Manuel_123*Seguro',
+            'password' => 'Manuel_123',
         ], 200000);
 
         $userB = $this->user([
@@ -36,7 +36,7 @@ class DatabaseSeeder extends Seeder
             'email' => 'carmen123@gmail.com',
             'phone' => '70000003',
             'role' => 'USER',
-            'password' => 'Carmen_123*Seguro',
+            'password' => 'Carmen_123',
             'mfa_enabled' => false,
             'mfa_secret' => null,
         ], 100000);
