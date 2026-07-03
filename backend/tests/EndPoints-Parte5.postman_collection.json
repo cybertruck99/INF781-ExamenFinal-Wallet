@@ -850,16 +850,28 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();",
-                  "ensureUserB(function (userBToken) {",
+                  "setEnv('confirmTransferUuid', '');",
+                  "setEnv('foreignTransferUuid', '');",
+                  "ensureUser(function (userToken) {",
                   "  pm.sendRequest({",
                   "    url: baseUrl() + '/transfers',",
                   "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + userBToken, 'Idempotency-Key': uuidv4() }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userEmail', ''), monto: 20, descripcion: 'Transferencia ajena Parte 5' }) }",
-                  "  }, function (err, res) {",
-                  "    if (err || !res || res.code !== 201) return failSetup('No se pudo crear transferencia ajena para endpoint 11.', res);",
-                  "    setEnv('foreignTransferUuid', jsonOf(res).uuid);",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + userToken, 'Idempotency-Key': uuidv4() }),",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userBEmail', ''), monto: 20, descripcion: 'Transferencia propia Parte 5 confirm' }) }",
+                  "  }, function (errOwn, resOwn) {",
+                  "    if (errOwn || !resOwn || resOwn.code !== 201) return failSetup('No se pudo crear transferencia propia para endpoint 11.', resOwn);",
+                  "    setEnv('confirmTransferUuid', jsonOf(resOwn).uuid);",
+                  "    ensureUserB(function (userBToken) {",
+                  "      pm.sendRequest({",
+                  "        url: baseUrl() + '/transfers',",
+                  "        method: 'POST',",
+                  "        header: requestHeaders({ Authorization: 'Bearer ' + userBToken, 'Idempotency-Key': uuidv4() }),",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userEmail', ''), monto: 20, descripcion: 'Transferencia ajena Parte 5' }) }",
+                  "      }, function (errForeign, resForeign) {",
+                  "        if (errForeign || !resForeign || resForeign.code !== 201) return failSetup('No se pudo crear transferencia ajena para endpoint 11.', resForeign);",
+                  "        setEnv('foreignTransferUuid', jsonOf(resForeign).uuid);",
+                  "      });",
+                  "    });",
                   "  });",
                   "});"
                 ]
@@ -939,13 +951,13 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/transfers/{{transferUuid}}/confirm",
+              "raw": "{{baseUrl}}/transfers/{{confirmTransferUuid}}/confirm",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "transfers",
-                "{{transferUuid}}",
+                "{{confirmTransferUuid}}",
                 "confirm"
               ]
             },

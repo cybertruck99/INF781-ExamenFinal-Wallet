@@ -22,7 +22,7 @@ class DatabaseSeeder extends Seeder
         ], 0);
 
         $userA = $this->user([
-            'full_name' => 'Manuel SecureWallet',
+            'full_name' => 'Carlos Manuel Mamani Uño',
             'ci' => '1000002',
             'email' => 'manuel123@gmail.com',
             'phone' => '70000002',
@@ -31,7 +31,7 @@ class DatabaseSeeder extends Seeder
         ], 200000);
 
         $userB = $this->user([
-            'full_name' => 'Carmen SecureWallet',
+            'full_name' => 'Carmen Gomez Martinez',
             'ci' => '1000003',
             'email' => 'carmen123@gmail.com',
             'phone' => '70000003',
