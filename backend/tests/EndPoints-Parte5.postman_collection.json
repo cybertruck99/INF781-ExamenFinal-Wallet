@@ -1,23 +1,23 @@
 {
   "info": {
-    "_postman_id": "63b79fd2-6bb7-4aa4-a1bd-000000000005",
+    "_postman_id": "8b4556f4-1d65-4bdc-b678-000000000005",
     "name": "EndPoints-Parte5",
-    "description": "Coleccion Postman Parte 5 - endpoints minimos SecureWallet. Incluye casos validos e invalidos minimos dentro de tests.",
+    "description": "Parte 5 rehecha: flujo Nuevo Usuario y 10 pruebas de seguridad adaptadas.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "helpers",
-      "value": "\nfunction env(name, fallback) {\n  const value = pm.environment.get(name);\n  return value !== undefined && value !== null && String(value) !== '' ? value : fallback;\n}\nfunction setEnv(name, value) { pm.environment.set(name, value || ''); }\nfunction baseUrl() { return env('baseUrl', 'http://127.0.0.1:8000/api/v1').replace(/[/]$/, ''); }\nfunction captchaToken() { return env('captchaToken', 'postman-test-captcha'); }\nfunction testRun() {\n  let id = pm.environment.get('postmanTestRun');\n  if (!id) {\n    id = 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2);\n    setEnv('postmanTestRun', id);\n  }\n  return id;\n}\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nfunction jsonOf(res) { try { return res.json(); } catch (e) { return {}; } }\nfunction requestHeaders(extra) {\n  return Object.assign({\n    Accept: 'application/json',\n    'Content-Type': 'application/json',\n    'X-Postman-Test-Run': testRun()\n  }, extra || {});\n}\nfunction failSetup(message, res) {\n  const detail = res ? (' HTTP ' + res.code + ' ' + res.text()) : '';\n  throw new Error(message + detail);\n}\nfunction login(email, password, accessVar, refreshVar, cb) {\n  pm.sendRequest({\n    url: baseUrl() + '/auth/login',\n    method: 'POST',\n    header: requestHeaders(),\n    body: { mode: 'raw', raw: JSON.stringify({ email: email, password: password, captcha_token: captchaToken() }) }\n  }, function (err, res) {\n    if (err || !res || res.code !== 200) return failSetup('No se pudo iniciar sesion para ' + email + '.', res);\n    const data = jsonOf(res);\n    if (data.mfa_required || data.requires_mfa) return failSetup('Login devolvio MFA cuando se esperaban tokens para ' + email + '.', res);\n    if (!data.tokens || !data.tokens.access_token || !data.tokens.refresh_token) return failSetup('Login sin tokens para ' + email + '.', res);\n    setEnv(accessVar, data.tokens.access_token);\n    setEnv(refreshVar, data.tokens.refresh_token);\n    if (cb) cb(data.tokens);\n  });\n}\nfunction loginUser(cb) {\n  login(env('userEmail', 'manuel123@gmail.com'), env('userPassword', 'Manuel_123'), 'accessTokenUser', 'refreshTokenUser', cb);\n}\nfunction ensureUser(cb) {\n  const token = pm.environment.get('accessTokenUser');\n  if (token) return cb ? cb(token) : undefined;\n  loginUser(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction loginUserB(cb) {\n  login(env('userBEmail', 'carmen123@gmail.com'), env('userBPassword', 'Carmen_123'), 'accessTokenUserB', 'refreshTokenUserB', cb);\n}\nfunction ensureUserB(cb) {\n  const token = pm.environment.get('accessTokenUserB');\n  if (token) return cb ? cb(token) : undefined;\n  loginUserB(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction loginAdmin(cb) {\n  login(env('adminEmail', 'admin@securewallet.test'), env('adminPassword', 'Admin123*Secure'), 'accessTokenAdmin', 'refreshTokenAdmin', cb);\n}\nfunction ensureAdmin(cb) {\n  const token = pm.environment.get('accessTokenAdmin');\n  if (token) return cb ? cb(token) : undefined;\n  loginAdmin(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction assertNoSecrets(text) {\n  const lower = (text || '').toLowerCase();\n  ['password_hash', 'mfa_secret', 'totp_secret', 'token_hash'].forEach(function (term) {\n    pm.expect(lower, 'No debe contener ' + term).to.not.include(term);\n  });\n}\nfunction base32ToBytes(input) {\n  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';\n  const clean = String(input || '').toUpperCase().replace(/[^A-Z2-7]/g, '');\n  let bits = '';\n  for (let i = 0; i < clean.length; i++) {\n    const value = alphabet.indexOf(clean[i]);\n    if (value >= 0) bits += value.toString(2).padStart(5, '0');\n  }\n  const bytes = [];\n  for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));\n  return bytes;\n}\nfunction bytesToWordArray(bytes) {\n  const words = [];\n  for (let i = 0; i < bytes.length; i++) words[i >>> 2] |= bytes[i] << (24 - (i % 4) * 8);\n  return CryptoJS.lib.WordArray.create(words, bytes.length);\n}\nfunction wordArrayToBytes(wordArray) {\n  const words = wordArray.words;\n  const sigBytes = wordArray.sigBytes;\n  const bytes = [];\n  for (let i = 0; i < sigBytes; i++) bytes.push((words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff);\n  return bytes;\n}\nfunction hotp(secret, counter) {\n  const key = bytesToWordArray(base32ToBytes(secret));\n  const high = Math.floor(counter / 0x100000000);\n  const low = counter >>> 0;\n  const msg = bytesToWordArray([\n    (high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,\n    (low >>> 24) & 255, (low >>> 16) & 255, (low >>> 8) & 255, low & 255\n  ]);\n  const hmac = wordArrayToBytes(CryptoJS.HmacSHA1(msg, key));\n  const offset = hmac[hmac.length - 1] & 0x0f;\n  const code = ((hmac[offset] & 0x7f) << 24) | ((hmac[offset + 1] & 0xff) << 16) | ((hmac[offset + 2] & 0xff) << 8) | (hmac[offset + 3] & 0xff);\n  return String(code % 1000000).padStart(6, '0');\n}\nfunction totp(secret) { return hotp(secret, Math.floor(Date.now() / 1000 / 30)); }\nfunction secretFromOtpAuth(uri) {\n  const match = String(uri || '').match(/[?&]secret=([^&]+)/);\n  return match ? decodeURIComponent(match[1]) : '';\n}\n",
+      "value": "\nfunction env(name, fallback) {\n  const value = pm.environment.get(name);\n  return value !== undefined && value !== null && String(value) !== '' ? value : fallback;\n}\nfunction setEnv(name, value) { pm.environment.set(name, value === undefined || value === null ? '' : value); }\nfunction baseUrl() { return env('baseUrl', 'http://127.0.0.1:8000/api/v1').replace(/[/]$/, ''); }\nfunction captchaToken() { return env('captchaToken', 'postman-test-captcha'); }\nfunction testRun() {\n  let id = pm.environment.get('postmanTestRun');\n  if (!id) {\n    id = 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2);\n    setEnv('postmanTestRun', id);\n  }\n  return id;\n}\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nfunction jsonOf(res) { try { return res.json(); } catch (e) { return {}; } }\nfunction requestHeaders(extra) {\n  return Object.assign({\n    Accept: 'application/json',\n    'Content-Type': 'application/json',\n    'X-Postman-Test-Run': testRun()\n  }, extra || {});\n}\nfunction failSetup(message, res) {\n  const detail = res ? (' HTTP ' + res.code + ' ' + res.text()) : '';\n  throw new Error(message + detail);\n}\nfunction clearNewSession() {\n  ['newUserAccessToken', 'newUserRefreshToken', 'newUserUuid', 'newUserMfaEnabled', 'transfer300Uuid', 'pendingLargeTransferUuid', 'foreignTransferUuid', 'oldRefreshToken', 'rotatedRefreshToken'].forEach(function (key) { setEnv(key, ''); });\n}\nfunction loginWithCredentials(email, password, accessVar, refreshVar, cb) {\n  pm.sendRequest({\n    url: baseUrl() + '/auth/login',\n    method: 'POST',\n    header: requestHeaders(),\n    body: { mode: 'raw', raw: JSON.stringify({ email: email, password: password, captcha_token: captchaToken() }) }\n  }, function (err, res) {\n    if (err || !res) return failSetup('No se pudo iniciar sesion.', res);\n    const data = jsonOf(res);\n    if (data.mfa_required) return failSetup('MFA activado no se puede realizar esta prueba.', res);\n    if (res.code !== 200 || !data.tokens || !data.tokens.access_token || !data.tokens.refresh_token) return failSetup('No se pudo iniciar sesion.', res);\n    setEnv(accessVar, data.tokens.access_token);\n    setEnv(refreshVar, data.tokens.refresh_token);\n    if (cb) cb(data.tokens, data.user);\n  });\n}\nfunction loginNew(cb) {\n  loginWithCredentials(env('newUserEmail', 'nuevousuario@gmail.com'), env('newUserPassword', 'NuevoUsuario_123'), 'newUserAccessToken', 'newUserRefreshToken', cb);\n}\nfunction ensureNew(cb) {\n  const token = pm.environment.get('newUserAccessToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginNew(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction loginAdmin(cb) {\n  loginWithCredentials(env('adminEmail', 'admin@securewallet.test'), env('adminPassword', 'Admin123*Secure'), 'adminToken', 'adminRefreshToken', cb);\n}\nfunction ensureAdmin(cb) {\n  const token = pm.environment.get('adminToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginAdmin(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction assertNoSecrets(text) {\n  const lower = (text || '').toLowerCase();\n  ['password', 'password_hash', 'mfa_secret', 'totp_secret', 'refresh_token', 'access_token', 'token_hash'].forEach(function (term) {\n    pm.expect(lower, 'No debe contener ' + term).to.not.include(term);\n  });\n}\nfunction exactNewEmail(user) { return user && String(user.email || '').toLowerCase() === env('newUserEmail', 'nuevousuario@gmail.com').toLowerCase(); }\n",
       "type": "string"
     }
   ],
   "item": [
     {
-      "name": "Parte 5 - Endpoints minimos SecureWallet",
+      "name": "Parte 5 - Nuevo Usuario y pruebas de seguridad",
       "item": [
         {
-          "name": "01 POST /auth/register - crear usuario y wallet",
+          "name": "01 Crear Nuevo Usuario - reemplaza anterior si existe",
           "event": [
             {
               "listen": "prerequest",
@@ -25,11 +25,31 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "const suffix = Date.now() + String(Math.floor(Math.random() * 1000)).padStart(3, '0');",
-                  "setEnv('registeredEmail', 'parte5.' + suffix + '@securewallet.test');",
-                  "setEnv('registeredPassword', 'Parte5_12345!');",
-                  "setEnv('registeredCi', 'P5' + suffix);",
-                  "setEnv('registeredPhone', '7' + suffix.slice(-7).padStart(7, '0'));"
+                  "clearNewSession();",
+                  "setEnv('postmanTestRun', 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2));",
+                  "loginAdmin(function (tokens) {",
+                  "  const adminToken = tokens.access_token;",
+                  "  pm.sendRequest({",
+                  "    url: baseUrl() + '/admin/users?q=' + encodeURIComponent(env('newUserEmail', 'nuevousuario@gmail.com')) + '&per_page=50',",
+                  "    method: 'GET',",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + adminToken })",
+                  "  }, function (errList, resList) {",
+                  "    if (errList || !resList || resList.code !== 200) return failSetup('No se pudo buscar Nuevo Usuario anterior.', resList);",
+                  "    const users = (jsonOf(resList).data || []).filter(exactNewEmail);",
+                  "    function deleteNext(index) {",
+                  "      if (index >= users.length) return;",
+                  "      pm.sendRequest({",
+                  "        url: baseUrl() + '/admin/users/' + users[index].uuid,",
+                  "        method: 'DELETE',",
+                  "        header: requestHeaders({ Authorization: 'Bearer ' + adminToken })",
+                  "      }, function (errDelete, resDelete) {",
+                  "        if (errDelete || !resDelete || ![200, 204, 404].includes(resDelete.code)) return failSetup('No se pudo borrar Nuevo Usuario anterior.', resDelete);",
+                  "        deleteNext(index + 1);",
+                  "      });",
+                  "    }",
+                  "    deleteNext(0);",
+                  "  });",
+                  "});"
                 ]
               }
             },
@@ -39,33 +59,13 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Register responde 201 Created', function () { pm.expect(pm.response.code).to.eql(201); });",
-                  "pm.test('Register crea user publico sin secretos', function () {",
+                  "pm.test('Nuevo Usuario se crea con 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "pm.test('Nuevo Usuario reemplazado y sin secretos', function () {",
                   "  const json = pm.response.json();",
-                  "  pm.expect(json.user).to.have.property('uuid');",
-                  "  pm.expect(json.user.email).to.eql(pm.environment.get('registeredEmail'));",
+                  "  pm.expect(json.user.full_name).to.eql(env('newUserName', 'Nuevo Usuario'));",
+                  "  pm.expect(json.user.email).to.eql(env('newUserEmail', 'nuevousuario@gmail.com'));",
+                  "  setEnv('newUserUuid', json.user.uuid);",
                   "  assertNoSecrets(pm.response.text());",
-                  "  pm.expect(pm.response.text().toLowerCase()).to.not.include('refresh_token');",
-                  "});",
-                  "pm.test('Register con CAPTCHA invalido devuelve 422 o 400', function (done) {",
-                  "  const suffix = Date.now() + 'bad';",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/auth/register',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders(),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({",
-                  "      full_name: 'Captcha Invalido',",
-                  "      ci: 'BAD' + suffix,",
-                  "      email: 'bad.' + suffix + '@securewallet.test',",
-                  "      phone: '799' + String(Date.now()).slice(-6),",
-                  "      password: 'Parte5_12345!',",
-                  "      captcha_token: 'captcha-invalido'",
-                  "    }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect([400, 422]).to.include(res.code);",
-                  "    done();",
-                  "  });",
                   "});"
                 ]
               }
@@ -102,7 +102,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"full_name\": \"Parte Cinco Usuario\",\n  \"ci\": \"{{registeredCi}}\",\n  \"email\": \"{{registeredEmail}}\",\n  \"phone\": \"{{registeredPhone}}\",\n  \"password\": \"{{registeredPassword}}\",\n  \"captcha_token\": \"{{captchaToken}}\"\n}",
+              "raw": "{\n  \"full_name\": \"{{newUserName}}\",\n  \"ci\": \"{{newUserCi}}\",\n  \"email\": \"{{newUserEmail}}\",\n  \"phone\": \"{{newUserPhone}}\",\n  \"password\": \"{{newUserPassword}}\",\n  \"captcha_token\": \"{{captchaToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -112,7 +112,7 @@
           }
         },
         {
-          "name": "02 POST /auth/login - emitir tokens o MFA",
+          "name": "02 Login Nuevo Usuario - obtiene tokens",
           "event": [
             {
               "listen": "test",
@@ -120,27 +120,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Login responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Login sin MFA devuelve access y refresh token', function () {",
+                  "pm.test('Login Nuevo Usuario responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('Login Nuevo Usuario entrega access y refresh token', function () {",
                   "  const json = pm.response.json();",
-                  "  pm.expect(json.mfa_required).to.eql(false);",
-                  "  pm.expect(json.tokens).to.have.property('access_token');",
-                  "  pm.expect(json.tokens).to.have.property('refresh_token');",
-                  "  setEnv('accessTokenUser', json.tokens.access_token);",
-                  "  setEnv('refreshTokenUser', json.tokens.refresh_token);",
-                  "  assertNoSecrets(JSON.stringify(json.user || {}));",
-                  "});",
-                  "pm.test('Login con credenciales malas devuelve 401', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/auth/login',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders(),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ email: env('userEmail', ''), password: 'Password_incorrecta_123!', captcha_token: captchaToken() }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(401);",
-                  "    done();",
-                  "  });",
+                  "  if (json.mfa_required) throw new Error('MFA activado no se puede realizar esta prueba.');",
+                  "  pm.expect(json.tokens.access_token).to.be.a('string');",
+                  "  pm.expect(json.tokens.refresh_token).to.be.a('string');",
+                  "  setEnv('newUserAccessToken', json.tokens.access_token);",
+                  "  setEnv('newUserRefreshToken', json.tokens.refresh_token);",
+                  "  setEnv('newUserUuid', json.user.uuid);",
                   "});"
                 ]
               }
@@ -177,7 +165,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"captcha_token\": \"{{captchaToken}}\"\n}",
+              "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"{{newUserPassword}}\",\n  \"captcha_token\": \"{{captchaToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -187,7 +175,7 @@
           }
         },
         {
-          "name": "03 POST /auth/mfa/verify - verificar MFA",
+          "name": "03 Recargar 1500 Bs a Nuevo Usuario",
           "event": [
             {
               "listen": "prerequest",
@@ -195,44 +183,80 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "const email = pm.environment.get('registeredEmail');",
-                  "const password = pm.environment.get('registeredPassword');",
-                  "if (!email || !password) failSetup('Ejecuta primero 01 POST /auth/register.');",
-                  "login(email, password, 'mfaSetupAccessToken', 'mfaSetupRefreshToken', function (tokens) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/auth/mfa/enable',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + tokens.access_token })",
-                  "  }, function (errEnable, resEnable) {",
-                  "    if (errEnable || !resEnable || resEnable.code !== 200) return failSetup('No se pudo iniciar MFA para usuario registrado.', resEnable);",
-                  "    const secret = secretFromOtpAuth(jsonOf(resEnable).otpauth_uri);",
-                  "    if (!secret) return failSetup('No se pudo extraer secret del otpauth_uri MFA.', resEnable);",
-                  "    const code = totp(secret);",
-                  "    setEnv('totpCode', code);",
-                  "    pm.sendRequest({",
-                  "      url: baseUrl() + '/auth/mfa/enable/confirm',",
-                  "      method: 'POST',",
-                  "      header: requestHeaders({ Authorization: 'Bearer ' + tokens.access_token }),",
-                  "      body: { mode: 'raw', raw: JSON.stringify({ code: code }) }",
-                  "    }, function (errConfirm, resConfirm) {",
-                  "      if (errConfirm || !resConfirm || resConfirm.code !== 200) return failSetup('No se pudo confirmar MFA para usuario registrado.', resConfirm);",
-                  "      pm.sendRequest({",
-                  "        url: baseUrl() + '/auth/login',",
-                  "        method: 'POST',",
-                  "        header: requestHeaders(),",
-                  "        body: { mode: 'raw', raw: JSON.stringify({ email: email, password: password, captcha_token: captchaToken() }) }",
-                  "      }, function (errLogin, resLogin) {",
-                  "        if (errLogin || !resLogin || resLogin.code !== 200) return failSetup('Login MFA no devolvio ticket.', resLogin);",
-                  "        const data = jsonOf(resLogin);",
-                  "        if (!data.ticket) return failSetup('Login MFA no devolvio ticket.', resLogin);",
-                  "        setEnv('mfaTicket', data.ticket);",
-                  "        setEnv('totpCode', totp(secret));",
-                  "        setEnv('mfaRegisteredEmail', email);",
-                  "        setEnv('mfaRegisteredPassword', password);",
-                  "      });",
-                  "    });",
-                  "  });",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Recarga responde 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "pm.test('Wallet queda con saldo minimo 1500', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(Number(json.wallet.balance)).to.be.at.least(1500);",
                   "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/topup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "topup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": 1500,\n  \"descripcion\": \"Recarga Parte 5 Nuevo Usuario\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "04 Enviar 300 Bs a manuel123@gmail.com",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "setEnv('idempotencyKey', uuidv4());",
+                  "ensureNew();"
                 ]
               }
             },
@@ -242,33 +266,23 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('MFA verify responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('MFA verify devuelve access_token y refresh_token', function () {",
+                  "pm.test('Transferencia 300 se crea pendiente', function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
                   "  const json = pm.response.json();",
-                  "  pm.expect(json.tokens).to.have.property('access_token');",
-                  "  pm.expect(json.tokens).to.have.property('refresh_token');",
-                  "  setEnv('mfaAccessToken', json.tokens.access_token);",
-                  "  setEnv('mfaRefreshToken', json.tokens.refresh_token);",
-                  "  assertNoSecrets(pm.response.text());",
+                  "  setEnv('transfer300Uuid', json.uuid);",
+                  "  pm.expect(json.requiere_totp).to.eql(false);",
                   "});",
-                  "pm.test('MFA verify con codigo invalido devuelve 401 o 422', function (done) {",
+                  "pm.test('Transferencia 300 se confirma correctamente', function (done) {",
                   "  pm.sendRequest({",
-                  "    url: baseUrl() + '/auth/login',",
+                  "    url: baseUrl() + '/transfers/' + env('transfer300Uuid', '') + '/confirm',",
                   "    method: 'POST',",
-                  "    header: requestHeaders(),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ email: env('mfaRegisteredEmail', ''), password: env('mfaRegisteredPassword', ''), captcha_token: captchaToken() }) }",
-                  "  }, function (errLogin, resLogin) {",
-                  "    pm.expect(errLogin).to.eql(null);",
-                  "    pm.sendRequest({",
-                  "      url: baseUrl() + '/auth/mfa/verify',",
-                  "      method: 'POST',",
-                  "      header: requestHeaders(),",
-                  "      body: { mode: 'raw', raw: JSON.stringify({ ticket: jsonOf(resLogin).ticket, code: '000000' }) }",
-                  "    }, function (err, res) {",
-                  "      pm.expect(err).to.eql(null);",
-                  "      pm.expect([401, 422]).to.include(res.code);",
-                  "      done();",
-                  "    });",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('newUserAccessToken', '') }),",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ confirmed: true }) }",
+                  "  }, function (err, res) {",
+                  "    pm.expect(err).to.eql(null);",
+                  "    pm.expect(res.code).to.eql(200);",
+                  "    pm.expect(jsonOf(res).transfer.estado).to.eql('CONFIRMADA');",
+                  "    done();",
                   "  });",
                   "});"
                 ]
@@ -292,22 +306,30 @@
                 "key": "X-Postman-Test-Run",
                 "value": "{{postmanTestRun}}",
                 "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/auth/mfa/verify",
+              "raw": "{{baseUrl}}/transfers",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "auth",
-                "mfa",
-                "verify"
+                "transfers"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"ticket\": \"{{mfaTicket}}\",\n  \"code\": \"{{totpCode}}\"\n}",
+              "raw": "{\n  \"destinatario\": \"{{userEmail}}\",\n  \"monto\": 300,\n  \"descripcion\": \"Envio 300 Bs Parte 5\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -317,35 +339,775 @@
           }
         },
         {
-          "name": "04 POST /auth/refresh - rotar refresh token",
+          "name": "05 Intentar enviar 800 Bs sin MFA - debe exigir TOTP",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "setEnv('idempotencyKey', uuidv4());",
+                  "ensureNew();"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "const beforeRefresh = pm.environment.get('refreshTokenUser');",
-                  "pm.test('Refresh responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Refresh devuelve tokens nuevos', function () {",
+                  "pm.test('Transferencia 800 se crea pendiente y requiere TOTP', function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
                   "  const json = pm.response.json();",
-                  "  pm.expect(json.tokens).to.have.property('access_token');",
-                  "  pm.expect(json.tokens).to.have.property('refresh_token');",
-                  "  setEnv('oldRefreshToken', beforeRefresh);",
-                  "  setEnv('accessTokenUser', json.tokens.access_token);",
-                  "  setEnv('refreshTokenUser', json.tokens.refresh_token);",
+                  "  pm.expect(json.requiere_totp).to.eql(true);",
+                  "  setEnv('pendingLargeTransferUuid', json.uuid);",
                   "});",
-                  "pm.test('Refresh reutilizado devuelve 401 y no entrega tokens', function (done) {",
+                  "pm.test('Confirmar 800 sin TOTP falla con 422 o 401', function (done) {",
+                  "  pm.sendRequest({",
+                  "    url: baseUrl() + '/transfers/' + env('pendingLargeTransferUuid', '') + '/confirm',",
+                  "    method: 'POST',",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('newUserAccessToken', '') }),",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ confirmed: true }) }",
+                  "  }, function (err, res) {",
+                  "    pm.expect(err).to.eql(null);",
+                  "    pm.expect([401, 422]).to.include(res.code);",
+                  "    done();",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destinatario\": \"{{userEmail}}\",\n  \"monto\": 800,\n  \"descripcion\": \"Intento 800 Bs sin MFA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "06 Verificar si MFA esta activo para Nuevo Usuario",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "pm.test('Perfil responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('Estado MFA se guarda y se muestra', function () {",
+                  "  const enabled = Boolean(pm.response.json().user.mfa_enabled);",
+                  "  setEnv('newUserMfaEnabled', enabled ? 'true' : 'false');",
+                  "  console.log('MFA Nuevo Usuario activo:', enabled ? 'SI' : 'NO');",
+                  "  pm.expect(typeof enabled).to.eql('boolean');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "07 Crear transferencia pendiente 800 Bs para TOTP manual",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "setEnv('idempotencyKey', uuidv4());",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Transferencia 800 pendiente creada', function () {",
+                  "  pm.expect(pm.response.code).to.eql(201);",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.requiere_totp).to.eql(true);",
+                  "  pm.environment.set('pendingLargeTransferUuid', json.uuid);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destinatario\": \"{{userEmail}}\",\n  \"monto\": 800,\n  \"descripcion\": \"Pendiente 800 Bs para TOTP manual\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "08 Confirmar 800 Bs con TOTP manual en body totp_code",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Confirmacion manual responde segun MFA/TOTP', function () {",
+                  "  const code = pm.environment.get('totpCode') || '';",
+                  "  if (code) {",
+                  "    pm.expect([200, 401, 422]).to.include(pm.response.code);",
+                  "  } else {",
+                  "    pm.expect([401, 422]).to.include(pm.response.code);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers/{{pendingLargeTransferUuid}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "{{pendingLargeTransferUuid}}",
+                "confirm"
+              ]
+            },
+            "description": "El codigo TOTP no va en Auth. Ponlo en el environment como totpCode; este request lo envia en el body como totp_code. Si MFA no esta activo o totpCode esta vacio, debe responder 401/422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmed\": true,\n  \"totp_code\": \"{{totpCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "09 RS-01 BOLA - intentar exponer saldo/recurso ajeno",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew(function () {",
+                  "  ensureAdmin(function (adminToken) {",
+                  "    pm.sendRequest({",
+                  "      url: baseUrl() + '/wallet/topup',",
+                  "      method: 'POST',",
+                  "      header: requestHeaders({ Authorization: 'Bearer ' + adminToken }),",
+                  "      body: { mode: 'raw', raw: JSON.stringify({ monto: 100, descripcion: 'Setup RS01 Parte 5' }) }",
+                  "    }, function (errTopup, resTopup) {",
+                  "      if (errTopup || !resTopup || ![200, 201].includes(resTopup.code)) return failSetup('No se pudo recargar admin para RS01.', resTopup);",
+                  "      pm.sendRequest({",
+                  "        url: baseUrl() + '/transfers',",
+                  "        method: 'POST',",
+                  "        header: requestHeaders({ Authorization: 'Bearer ' + adminToken, 'Idempotency-Key': uuidv4() }),",
+                  "        body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('newUserEmail', ''), monto: 50, descripcion: 'Transferencia ajena RS01 Parte 5' }) }",
+                  "      }, function (errTransfer, resTransfer) {",
+                  "        if (errTransfer || !resTransfer || resTransfer.code !== 201) return failSetup('No se pudo crear transferencia ajena RS01.', resTransfer);",
+                  "        setEnv('foreignTransferUuid', jsonOf(resTransfer).uuid);",
+                  "      });",
+                  "    });",
+                  "  });",
+                  "});"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RS-01 devuelve 403 o 404', function () { pm.expect([403, 404]).to.include(pm.response.code); });",
+                  "pm.test('RS-01 no expone saldo/wallet/datos financieros ajenos', function () {",
+                  "  const text = pm.response.text().toLowerCase();",
+                  "  ['wallet', 'saldo', 'balance', 'balance_after', 'amount_cents', 'transactions', 'movimientos'].forEach(function (term) {",
+                  "    pm.expect(text).to.not.include(term);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers/{{foreignTransferUuid}}/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers",
+                "{{foreignTransferUuid}}",
+                "confirm"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmed\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "10 RS-02 RBAC - Nuevo Usuario no accede a /admin/users",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RS-02 USER recibe 403', function () { pm.expect(pm.response.code).to.eql(403); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11 RS-03 Perfil sin password, MFA secret ni tokens",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "pm.test('RS-03 /me responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('RS-03 no expone secretos ni tokens', function () { assertNoSecrets(pm.response.text()); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "12 RS-04 Datos manipulados rechazados",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RS-04 devuelve 422', function () { pm.expect(pm.response.code).to.eql(422); });",
+                  "pm.test('RS-04 no muestra SQL ni stack trace', function () {",
+                  "  const text = pm.response.text().toLowerCase();",
+                  "  ['select ', 'insert ', 'update ', 'exception', 'stack trace'].forEach(function (term) { pm.expect(text).to.not.include(term); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/wallet/topup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "wallet",
+                "topup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"monto\": \"1 OR 1=1\",\n  \"descripcion\": \"inyeccion\",\n  \"role\": \"ADMIN\",\n  \"balance_cents\": 999999,\n  \"wallet_id\": \"1 OR 1=1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "13 RS-05 Idempotency-Key no duplica transferencia",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "setEnv('idempotencyKey', uuidv4());",
+                  "ensureNew();"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "pm.test('RS-05 primera respuesta 201', function () { pm.expect(pm.response.code).to.eql(201); });",
+                  "pm.test('RS-05 repetida devuelve mismo uuid', function (done) {",
+                  "  const firstUuid = pm.response.json().uuid;",
+                  "  pm.sendRequest({",
+                  "    url: baseUrl() + '/transfers',",
+                  "    method: 'POST',",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('newUserAccessToken', ''), 'Idempotency-Key': env('idempotencyKey', '') }),",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userEmail', ''), monto: 25, descripcion: 'Idempotencia Parte 5' }) }",
+                  "  }, function (err, res) {",
+                  "    pm.expect(err).to.eql(null);",
+                  "    pm.expect([200, 201]).to.include(res.code);",
+                  "    pm.expect(jsonOf(res).uuid).to.eql(firstUuid);",
+                  "    done();",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{idempotencyKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transfers"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destinatario\": \"{{userEmail}}\",\n  \"monto\": 25,\n  \"descripcion\": \"Idempotencia Parte 5\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "14 RS-06 CORS malicioso bloqueado y headers presentes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RS-06 health responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('RS-06 no permite Access-Control-Allow-Origin malicioso', function () {",
+                  "  pm.expect(pm.response.headers.get('Access-Control-Allow-Origin') || '').to.not.eql('https://evil.example');",
+                  "});",
+                  "pm.test('RS-06 headers de seguridad presentes', function () {",
+                  "  ['X-Content-Type-Options', 'X-Frame-Options', 'Content-Security-Policy'].forEach(function (header) {",
+                  "    pm.expect(pm.response.headers.get(header), header).to.not.be.null;",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "https://evil.example",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "15 RS-07 Refresh token viejo reutilizado falla",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureNew();",
+                  "setEnv('oldRefreshToken', env('newUserRefreshToken', ''));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "eval(pm.collectionVariables.get('helpers'));",
+                  "pm.test('RS-07 primer refresh responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "pm.test('RS-07 reusar refresh viejo responde 401 sin tokens', function (done) {",
+                  "  const json = pm.response.json();",
+                  "  setEnv('newUserAccessToken', json.tokens.access_token);",
+                  "  setEnv('newUserRefreshToken', json.tokens.refresh_token);",
+                  "  setEnv('rotatedRefreshToken', json.tokens.refresh_token);",
                   "  pm.sendRequest({",
                   "    url: baseUrl() + '/auth/refresh',",
                   "    method: 'POST',",
                   "    header: requestHeaders(),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: beforeRefresh }) }",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: env('oldRefreshToken', '') }) }",
                   "  }, function (err, res) {",
                   "    pm.expect(err).to.eql(null);",
                   "    pm.expect(res.code).to.eql(401);",
-                  "    pm.expect(res.text().toLowerCase()).to.not.include('access_token');",
-                  "    loginUser(function () { done(); });",
+                  "    pm.expect(res.text()).to.not.include('access_token');",
+                  "    pm.expect(res.text()).to.not.include('refresh_token');",
+                  "    setEnv('newUserAccessToken', '');",
+                  "    setEnv('newUserRefreshToken', '');",
+                  "    done();",
                   "  });",
                   "});"
                 ]
@@ -383,7 +1145,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshTokenUser}}\"\n}",
+              "raw": "{\n  \"refresh_token\": \"{{newUserRefreshToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -393,7 +1155,7 @@
           }
         },
         {
-          "name": "05 POST /auth/logout - revocar sesion",
+          "name": "16 RS-08 Sexto intento de login bloqueado",
           "event": [
             {
               "listen": "prerequest",
@@ -401,7 +1163,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
+                  "setEnv('rateLimitEmail', 'ratelimit-nuevo-' + Date.now() + '@gmail.com');"
                 ]
               }
             },
@@ -411,19 +1173,22 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "const loggedOutRefresh = pm.environment.get('refreshTokenUser');",
-                  "pm.test('Logout responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Refresh de sesion cerrada falla con 401', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/auth/refresh',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders(),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ refresh_token: loggedOutRefresh }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(401);",
-                  "    loginUser(function () { done(); });",
-                  "  });",
+                  "pm.test('RS-08 sexto intento responde 429', function (done) {",
+                  "  const badBody = JSON.stringify({ email: env('rateLimitEmail', ''), password: 'Password_erronea_123!', captcha_token: captchaToken() });",
+                  "  let count = 1;",
+                  "  function next(lastRes) {",
+                  "    if (count >= 6) {",
+                  "      pm.expect(lastRes.code).to.eql(429);",
+                  "      pm.expect(lastRes.headers.get('Retry-After') || jsonOf(lastRes).retry_after).to.not.eql(undefined);",
+                  "      return done();",
+                  "    }",
+                  "    count += 1;",
+                  "    pm.sendRequest({ url: baseUrl() + '/auth/login', method: 'POST', header: requestHeaders(), body: { mode: 'raw', raw: badBody } }, function (err, res) {",
+                  "      pm.expect(err).to.eql(null);",
+                  "      next(res);",
+                  "    });",
+                  "  }",
+                  "  next(pm.response);",
                   "});"
                 ]
               }
@@ -443,29 +1208,24 @@
                 "type": "text"
               },
               {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              },
-              {
                 "key": "X-Postman-Test-Run",
                 "value": "{{postmanTestRun}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/auth/logout",
+              "raw": "{{baseUrl}}/auth/login",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "auth",
-                "logout"
+                "login"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refresh_token\": \"{{refreshTokenUser}}\"\n}",
+              "raw": "{\n  \"email\": \"{{rateLimitEmail}}\",\n  \"password\": \"Password_erronea_123!\",\n  \"captcha_token\": \"{{captchaToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -475,7 +1235,7 @@
           }
         },
         {
-          "name": "06 POST /auth/mfa/enable - iniciar activacion MFA",
+          "name": "17 RS-09 Auditoria protegida y consultable por ADMIN",
           "event": [
             {
               "listen": "prerequest",
@@ -483,7 +1243,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
+                  "ensureNew();",
+                  "ensureAdmin();"
                 ]
               }
             },
@@ -493,73 +1254,19 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('MFA enable responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('MFA enable devuelve otpauth_uri y no expone mfa_secret', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.otpauth_uri).to.include('otpauth://totp/');",
-                  "  assertNoSecrets(pm.response.text());",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Postman-Test-Run",
-                "value": "{{postmanTestRun}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/auth/mfa/enable",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "auth",
-                "mfa",
-                "enable"
-              ]
-            }
-          }
-        },
-        {
-          "name": "07 GET /me - perfil propio sin secretos",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('/me responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('/me devuelve perfil propio sin secretos', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.user.email).to.eql(env('userEmail', 'manuel123@gmail.com'));",
-                  "  assertNoSecrets(pm.response.text());",
-                  "  pm.expect(pm.response.text().toLowerCase()).to.not.include('refresh_token');",
+                  "pm.test('RS-09 Nuevo Usuario recibe 403 en auditoria', function () { pm.expect(pm.response.code).to.eql(403); });",
+                  "pm.test('RS-09 ADMIN consulta auditoria con trazabilidad', function (done) {",
+                  "  pm.sendRequest({",
+                  "    url: baseUrl() + '/admin/audit-logs?per_page=20',",
+                  "    method: 'GET',",
+                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('adminToken', '') })",
+                  "  }, function (err, res) {",
+                  "    pm.expect(err).to.eql(null);",
+                  "    pm.expect(res.code).to.eql(200);",
+                  "    const log = (jsonOf(res).data || [])[0];",
+                  "    ['action', 'ip', 'user_agent', 'created_at'].forEach(function (field) { pm.expect(log).to.have.property(field); });",
+                  "    done();",
+                  "  });",
                   "});"
                 ]
               }
@@ -574,8 +1281,62 @@
                 "type": "text"
               },
               {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Postman-Test-Run",
+                "value": "{{postmanTestRun}}",
+                "type": "text"
+              },
+              {
                 "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
+                "value": "Bearer {{newUserAccessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/audit-logs?per_page=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "audit-logs?per_page=1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "18 RS-10 Cookies falsas no autentican",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RS-10 responde 401', function () { pm.expect(pm.response.code).to.eql(401); });",
+                  "pm.test('RS-10 respuesta JSON y sin cookies de tokens', function () {",
+                  "  pm.expect((pm.response.headers.get('Content-Type') || '').toLowerCase()).to.include('application/json');",
+                  "  pm.expect(pm.response.text().trim().startsWith('<')).to.eql(false);",
+                  "  pm.expect(pm.response.headers.get('Set-Cookie') || '').to.not.include('token');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Cookie",
+                "value": "access_token=falso; refresh_token=falso",
                 "type": "text"
               }
             ],
@@ -591,7 +1352,7 @@
           }
         },
         {
-          "name": "08 GET /wallet - wallet propia",
+          "name": "19 Cerrar sesion Nuevo Usuario",
           "event": [
             {
               "listen": "prerequest",
@@ -599,7 +1360,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
+                  "ensureNew();"
                 ]
               }
             },
@@ -609,86 +1370,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('/wallet responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('/wallet devuelve wallet propia y saldo', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.wallet).to.have.property('uuid');",
-                  "  pm.expect(json.wallet).to.have.property('balance');",
-                  "  pm.expect(json.wallet.owner.email).to.eql(env('userEmail', 'manuel123@gmail.com'));",
-                  "});",
-                  "pm.test('/wallet sin token devuelve 401', function (done) {",
-                  "  pm.sendRequest({ url: baseUrl() + '/wallet', method: 'GET', header: { Accept: 'application/json' } }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(401);",
-                  "    done();",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/wallet",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "wallet"
-              ]
-            }
-          }
-        },
-        {
-          "name": "09 POST /wallet/topup - recargar saldo",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Topup responde 201 o 200', function () { pm.expect([200, 201]).to.include(pm.response.code); });",
-                  "pm.test('Topup registra movimiento RECARGA y wallet', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.transaction.type).to.eql('RECARGA');",
-                  "  pm.expect(json.wallet).to.have.property('balance');",
-                  "});",
-                  "pm.test('Topup con monto invalido devuelve 422', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/wallet/topup',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', '') }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ monto: 'abc', descripcion: 'Monto invalido' }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(422);",
-                  "    done();",
-                  "  });",
-                  "});"
+                  "pm.test('Logout Nuevo Usuario responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
+                  "clearNewSession();"
                 ]
               }
             }
@@ -707,581 +1390,35 @@
                 "type": "text"
               },
               {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Postman-Test-Run",
-                "value": "{{postmanTestRun}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/wallet/topup",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "wallet",
-                "topup"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"monto\": 100,\n  \"descripcion\": \"Recarga Parte 5\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "10 POST /transfers - crear transferencia pendiente",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser(function () { setEnv('idempotencyKey', uuidv4()); });"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Transfer responde 201 Created', function () { pm.expect(pm.response.code).to.eql(201); });",
-                  "pm.test('Transfer devuelve uuid y queda pendiente', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json).to.have.property('uuid');",
-                  "  setEnv('transferUuid', json.uuid);",
-                  "  pm.expect(['PENDIENTE', 'PENDIENTE_CONFIRMACION']).to.include(json.estado);",
-                  "});",
-                  "pm.test('Transfer sin Idempotency-Key devuelve 400 o 422', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/transfers',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', '') }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userBEmail', ''), monto: 10, descripcion: 'Sin idempotency' }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect([400, 422]).to.include(res.code);",
-                  "    done();",
-                  "  });",
-                  "});",
-                  "pm.test('Transfer con saldo insuficiente devuelve 409 o 422', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/transfers',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', ''), 'Idempotency-Key': uuidv4() }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userBEmail', ''), monto: 5000, descripcion: 'Saldo insuficiente' }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect([409, 422]).to.include(res.code);",
-                  "    done();",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              },
-              {
                 "key": "X-Postman-Test-Run",
                 "value": "{{postmanTestRun}}",
                 "type": "text"
               },
               {
-                "key": "Idempotency-Key",
-                "value": "{{idempotencyKey}}",
+                "key": "Authorization",
+                "value": "Bearer {{newUserAccessToken}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/transfers",
+              "raw": "{{baseUrl}}/auth/logout",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "transfers"
+                "auth",
+                "logout"
               ]
             },
+            "description": "Cierra la sesion API de Nuevo Usuario. Si tambien esta abierto en el frontend, usa el boton Cerrar sesion en la interfaz.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"destinatario\": \"{{userBEmail}}\",\n  \"monto\": 25,\n  \"descripcion\": \"Transferencia Parte 5\"\n}",
+              "raw": "{\n  \"refresh_token\": \"{{newUserRefreshToken}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
-            }
-          }
-        },
-        {
-          "name": "11 POST /transfers/{uuid}/confirm - confirmar transferencia",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "setEnv('confirmTransferUuid', '');",
-                  "setEnv('foreignTransferUuid', '');",
-                  "ensureUser(function (userToken) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/transfers',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + userToken, 'Idempotency-Key': uuidv4() }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userBEmail', ''), monto: 20, descripcion: 'Transferencia propia Parte 5 confirm' }) }",
-                  "  }, function (errOwn, resOwn) {",
-                  "    if (errOwn || !resOwn || resOwn.code !== 201) return failSetup('No se pudo crear transferencia propia para endpoint 11.', resOwn);",
-                  "    setEnv('confirmTransferUuid', jsonOf(resOwn).uuid);",
-                  "    ensureUserB(function (userBToken) {",
-                  "      pm.sendRequest({",
-                  "        url: baseUrl() + '/transfers',",
-                  "        method: 'POST',",
-                  "        header: requestHeaders({ Authorization: 'Bearer ' + userBToken, 'Idempotency-Key': uuidv4() }),",
-                  "        body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userEmail', ''), monto: 20, descripcion: 'Transferencia ajena Parte 5' }) }",
-                  "      }, function (errForeign, resForeign) {",
-                  "        if (errForeign || !resForeign || resForeign.code !== 201) return failSetup('No se pudo crear transferencia ajena para endpoint 11.', resForeign);",
-                  "        setEnv('foreignTransferUuid', jsonOf(resForeign).uuid);",
-                  "      });",
-                  "    });",
-                  "  });",
-                  "});"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Confirm transfer responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Confirm transfer devuelve transferencia confirmada y wallet', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.transfer.estado).to.eql('CONFIRMADA');",
-                  "  pm.expect(json).to.have.property('wallet');",
-                  "});",
-                  "pm.test('Confirmar transferencia ajena devuelve 403 o 404', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/transfers/' + env('foreignTransferUuid', '') + '/confirm',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', '') }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ confirmed: true }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect([403, 404]).to.include(res.code);",
-                  "    done();",
-                  "  });",
-                  "});",
-                  "pm.test('Transferencia mayor a 500 Bs sin TOTP exige validacion', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/transfers',",
-                  "    method: 'POST',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', ''), 'Idempotency-Key': uuidv4() }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ destinatario: env('userBEmail', ''), monto: 600, descripcion: 'Mayor a 500 sin TOTP' }) }",
-                  "  }, function (errCreate, resCreate) {",
-                  "    pm.expect(errCreate).to.eql(null);",
-                  "    pm.expect(resCreate.code).to.eql(201);",
-                  "    pm.sendRequest({",
-                  "      url: baseUrl() + '/transfers/' + jsonOf(resCreate).uuid + '/confirm',",
-                  "      method: 'POST',",
-                  "      header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', '') }),",
-                  "      body: { mode: 'raw', raw: JSON.stringify({ confirmed: true }) }",
-                  "    }, function (errConfirm, resConfirm) {",
-                  "      pm.expect(errConfirm).to.eql(null);",
-                  "      pm.expect([401, 422]).to.include(resConfirm.code);",
-                  "      done();",
-                  "    });",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Postman-Test-Run",
-                "value": "{{postmanTestRun}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/transfers/{{confirmTransferUuid}}/confirm",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transfers",
-                "{{confirmTransferUuid}}",
-                "confirm"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"confirmed\": true\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "12 GET /transactions - historial propio",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Transactions responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Transactions devuelve historial paginado propio', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.data).to.be.an('array');",
-                  "  pm.expect(json).to.have.property('meta');",
-                  "  if (json.data.length > 0) {",
-                  "    const tx = json.data[0];",
-                  "    ['uuid', 'type', 'amount', 'description', 'balance_after', 'created_at'].forEach(function (field) {",
-                  "      pm.expect(tx).to.have.property(field);",
-                  "    });",
-                  "  }",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenUser}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/transactions?per_page=10",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "transactions"
-              ],
-              "query": [
-                {
-                  "key": "per_page",
-                  "value": "10"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "13 GET /admin/users - listar usuarios",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureAdmin(); ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Admin users responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Admin users lista usuarios y guarda userUuid', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.data).to.be.an('array');",
-                  "  const target = json.data.find(function (u) { return u.email === env('registeredEmail', ''); }) || json.data.find(function (u) { return u.role === 'USER' && u.email !== env('userEmail', ''); }) || json.data.find(function (u) { return u.role === 'USER'; });",
-                  "  pm.expect(target).to.exist;",
-                  "  setEnv('userUuid', target.uuid);",
-                  "});",
-                  "pm.test('Admin users con token USER devuelve 403', function (done) {",
-                  "  pm.sendRequest({ url: baseUrl() + '/admin/users', method: 'GET', header: { Accept: 'application/json', Authorization: 'Bearer ' + env('accessTokenUser', '') } }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(403);",
-                  "    done();",
-                  "  });",
-                  "});",
-                  "pm.test('Admin users sin token devuelve 401', function (done) {",
-                  "  pm.sendRequest({ url: baseUrl() + '/admin/users', method: 'GET', header: { Accept: 'application/json' } }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(401);",
-                  "    done();",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenAdmin}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/users?per_page=50",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "users"
-              ],
-              "query": [
-                {
-                  "key": "per_page",
-                  "value": "50"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "14 PATCH /admin/users/{uuid}/block - bloquear usuario",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureAdmin(); ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Admin block responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Admin block devuelve usuario objetivo', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.user.uuid).to.eql(env('userUuid', ''));",
-                  "});",
-                  "pm.test('Admin block con token USER devuelve 403', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/admin/users/' + env('userUuid', '') + '/block',",
-                  "    method: 'PATCH',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenUser', '') }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ blocked: false }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(403);",
-                  "    done();",
-                  "  });",
-                  "});",
-                  "pm.test('Admin block UUID inexistente devuelve 404', function (done) {",
-                  "  pm.sendRequest({",
-                  "    url: baseUrl() + '/admin/users/00000000-0000-4000-8000-000000000000/block',",
-                  "    method: 'PATCH',",
-                  "    header: requestHeaders({ Authorization: 'Bearer ' + env('accessTokenAdmin', '') }),",
-                  "    body: { mode: 'raw', raw: JSON.stringify({ blocked: true }) }",
-                  "  }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(404);",
-                  "    done();",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenAdmin}}",
-                "type": "text"
-              },
-              {
-                "key": "X-Postman-Test-Run",
-                "value": "{{postmanTestRun}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/users/{{userUuid}}/block",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "{{userUuid}}",
-                "block"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"blocked\": true,\n  \"minutes\": 1\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          }
-        },
-        {
-          "name": "15 GET /admin/audit-logs - bitacora",
-          "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "ensureAdmin(); ensureUser();"
-                ]
-              }
-            },
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "eval(pm.collectionVariables.get('helpers'));",
-                  "pm.test('Audit logs responde 200 OK', function () { pm.expect(pm.response.code).to.eql(200); });",
-                  "pm.test('Audit logs devuelve bitacora paginada con trazabilidad', function () {",
-                  "  const json = pm.response.json();",
-                  "  pm.expect(json.data).to.be.an('array');",
-                  "  pm.expect(json.data.length).to.be.greaterThan(0);",
-                  "  const log = json.data[0];",
-                  "  ['action', 'ip', 'user_agent', 'created_at'].forEach(function (field) { pm.expect(log).to.have.property(field); });",
-                  "  pm.expect(log).to.have.property('user');",
-                  "});",
-                  "pm.test('Audit logs con token USER devuelve 403', function (done) {",
-                  "  pm.sendRequest({ url: baseUrl() + '/admin/audit-logs?per_page=1', method: 'GET', header: { Accept: 'application/json', Authorization: 'Bearer ' + env('accessTokenUser', '') } }, function (err, res) {",
-                  "    pm.expect(err).to.eql(null);",
-                  "    pm.expect(res.code).to.eql(403);",
-                  "    done();",
-                  "  });",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Accept",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessTokenAdmin}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/admin/audit-logs?per_page=20",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "admin",
-                "audit-logs"
-              ],
-              "query": [
-                {
-                  "key": "per_page",
-                  "value": "20"
-                }
-              ]
             }
           }
         }

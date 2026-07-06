@@ -59,4 +59,25 @@ class MfaController extends Controller
 
         return response()->json(['message' => 'MFA activado correctamente.']);
     }
+
+    public function disable(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $user->forceFill([
+            'mfa_enabled' => false,
+            'mfa_secret' => null,
+            'mfa_pending_secret' => null,
+        ])->save();
+
+        $this->audit->log($request, 'MFA_DISABLED', $user);
+
+        return response()->json([
+            'message' => 'MFA desactivado correctamente.',
+            'user' => [
+                'uuid' => $user->uuid,
+                'mfa_enabled' => false,
+            ],
+        ]);
+    }
 }

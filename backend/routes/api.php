@@ -22,6 +22,7 @@ Route::prefix('api/v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::post('/auth/mfa/enable', [MfaController::class, 'enable']);
         Route::post('/auth/mfa/enable/confirm', [MfaController::class, 'confirm'])->middleware('rate.limit:mfa-enable-confirm,5,1');
+        Route::post('/auth/mfa/disable', [MfaController::class, 'disable']);
 
         Route::get('/me', [ProfileController::class, 'me']);
         Route::get('/wallet', [WalletController::class, 'show']);
@@ -34,6 +35,7 @@ Route::prefix('api/v1')->group(function () {
         Route::middleware('admin')->group(function () {
             Route::get('/admin/users', [AdminController::class, 'users']);
             Route::patch('/admin/users/{uuid}/block', [AdminController::class, 'block']);
+            Route::delete('/admin/users/{uuid}', [AdminController::class, 'destroy']);
             Route::get('/admin/audit-logs', [AdminController::class, 'auditLogs']);
         });
     });

@@ -136,6 +136,8 @@ EndPoints-Parte5.postman_environment.json
 
 `INF781-ExamenFinal` contiene 10 peticiones OWASP RS-01 a RS-10 con ejemplos válidos e inválidos. `EndPoints-Parte5` contiene los endpoints principales del sistema y pruebas auxiliares dentro de los scripts de Postman.
 
+En `EndPoints-Parte5`, el código TOTP no va en la pestaña Auth de Postman. Para confirmar la transferencia de Bs 800 con MFA, escribe el código en la variable de environment `totpCode`; la petición `08 Confirmar 800 Bs con TOTP manual en body totp_code` lo envía en el body como `totp_code`.
+
 ## Endpoints principales
 
 Prefijo base: `/api/v1`.
@@ -151,6 +153,7 @@ Prefijo base: `/api/v1`.
 | POST | `/auth/logout` | USER | Revoca sesión |
 | POST | `/auth/mfa/enable` | USER | Inicia activación MFA |
 | POST | `/auth/mfa/enable/confirm` | USER | Confirma MFA |
+| POST | `/auth/mfa/disable` | USER | Desactiva MFA para pruebas manuales |
 | GET | `/me` | USER | Perfil propio sin secretos |
 | GET | `/wallet` | USER | Wallet propia |
 | POST | `/wallet/topup` | USER | Recarga |

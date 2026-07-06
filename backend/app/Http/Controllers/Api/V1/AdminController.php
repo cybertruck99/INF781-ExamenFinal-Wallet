@@ -7,10 +7,13 @@ use App\Http\Controllers\Api\V1\Concerns\ValidatesQueryParameters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\BlockUserRequest;
 use App\Models\AuditLog;
+use App\Models\IdempotencyKey;
+use App\Models\Transfer;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
@@ -79,6 +82,44 @@ class AdminController extends Controller
         ]);
 
         return response()->json(['user' => $this->publicUser($target->fresh())]);
+    }
+
+    public function destroy(Request $request, string $uuid): JsonResponse
+    {
+        /** @var User|null $target */
+        $target = User::query()->where('uuid', $uuid)->first();
+        if (! $target) {
+            abort(404);
+        }
+
+        if ($target->id === $request->user()->id) {
+            abort(422, 'El administrador no puede eliminarse a si mismo desde este endpoint.');
+        }
+
+        DB::transaction(function () use ($request, $target): void {
+            $transferIds = Transfer::query()
+                ->where('sender_user_id', $target->id)
+                ->orWhere('recipient_user_id', $target->id)
+                ->pluck('id');
+
+            IdempotencyKey::query()
+                ->where('user_id', $target->id)
+                ->when($transferIds->isNotEmpty(), fn ($query) => $query->orWhereIn('transfer_id', $transferIds))
+                ->delete();
+
+            if ($transferIds->isNotEmpty()) {
+                Transfer::query()->whereIn('id', $transferIds)->delete();
+            }
+
+            $this->audit->log($request, 'ADMIN_USER_DELETED', $request->user(), [
+                'target_uuid' => $target->uuid,
+                'target_email' => $target->email,
+            ]);
+
+            $target->delete();
+        });
+
+        return response()->json(['message' => 'Usuario eliminado correctamente.']);
     }
 
     public function auditLogs(Request $request): JsonResponse

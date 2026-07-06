@@ -635,6 +635,20 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
+  async function disableMfa() {
+    setError('')
+    setMessage('')
+    try {
+      const data = await api('/auth/mfa/disable', { method: 'POST', body: JSON.stringify({}) })
+      setQrDataUrl('')
+      setTotpCode('')
+      setMessage(data.message)
+      await loadAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   async function toggleBlock(target) {
     setError('')
     try {
@@ -675,6 +689,7 @@ function Dashboard({ user, onLogout }) {
         <p><b>Teléfono:</b> {currentUser?.phone}</p>
         <p><b>MFA:</b> {currentUser?.mfa_enabled ? 'Activo' : 'Inactivo'}</p>
         {!currentUser?.mfa_enabled && <button onClick={enableMfa}>Activar MFA</button>}
+        {currentUser?.mfa_enabled && <button onClick={disableMfa}>Desactivar MFA</button>}
         {qrDataUrl && <form onSubmit={confirmMfa} className="form-grid compact">
           <img className="qr" src={qrDataUrl} alt="QR MFA" />
           <label>Código TOTP<input value={totpCode} onChange={e => setTotpCode(e.target.value)} maxLength="6" /></label>
