@@ -98,6 +98,7 @@ CORS_ALLOWED_ORIGINS_PATTERNS=^http://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\
 
 RECAPTCHA_SITE_KEY=your-google-recaptcha-v2-site-key
 RECAPTCHA_SECRET_KEY=your-google-recaptcha-v2-secret-key
+RECAPTCHA_ENABLED=true
 CAPTCHA_TEST_TOKEN=postman-test-captcha
 ```
 
@@ -108,7 +109,7 @@ VITE_API_BASE_URL=
 VITE_RECAPTCHA_SITE_KEY=optional-google-recaptcha-v2-site-key
 ```
 
-Las claves reales y `.env` locales no se suben al repositorio. Para Postman local se usa `CAPTCHA_TEST_TOKEN`; en producción debe usarse reCAPTCHA real.
+Las claves reales y `.env` locales no se suben al repositorio. `RECAPTCHA_ENABLED=false` desactiva y oculta CAPTCHA en login/registro. Para Postman local se usa `CAPTCHA_TEST_TOKEN`; en producción debe usarse reCAPTCHA real.
 
 ## Usuarios semilla
 

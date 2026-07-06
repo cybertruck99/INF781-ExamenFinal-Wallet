@@ -35,12 +35,22 @@ class AuthController extends Controller
 
     public function captchaSiteKey(): JsonResponse
     {
+        if (! (bool) config('services.recaptcha.enabled', true)) {
+            return response()->json([
+                'enabled' => false,
+                'site_key' => null,
+            ]);
+        }
+
         $siteKey = config('services.recaptcha.site_key');
         if (blank($siteKey)) {
             abort(503, 'reCAPTCHA no esta configurado.');
         }
 
-        return response()->json(['site_key' => $siteKey]);
+        return response()->json([
+            'enabled' => true,
+            'site_key' => $siteKey,
+        ]);
     }
 
     public function register(RegisterRequest $request): JsonResponse

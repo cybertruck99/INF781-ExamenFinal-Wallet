@@ -26,8 +26,17 @@ class RegisterRequest extends StrictFormRequest
             'email' => ['required', 'email:rfc', 'max:180', 'unique:users,email'],
             'phone' => ['required', 'string', 'min:7', 'max:20', 'regex:/^[0-9+ -]+$/', 'unique:users,phone'],
             'password' => ['required', 'string', Password::min(12)->mixedCase()->numbers()->symbols()],
-            'captcha_token' => ['required', 'string', 'max:4096', new Recaptcha()],
+            'captcha_token' => $this->captchaRules(),
             'g-recaptcha-response' => ['nullable', 'string', 'max:4096'],
         ];
+    }
+
+    private function captchaRules(): array
+    {
+        if (! (bool) config('services.recaptcha.enabled', true)) {
+            return ['nullable', 'string', 'max:4096'];
+        }
+
+        return ['required', 'string', 'max:4096', new Recaptcha()];
     }
 }

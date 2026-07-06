@@ -191,6 +191,7 @@ function AuthScreen({ onAuth }) {
   const [registerTouched, setRegisterTouched] = useState({})
   const [apiLoginErrors, setApiLoginErrors] = useState({})
   const [apiRegisterErrors, setApiRegisterErrors] = useState({})
+  const [captchaEnabled, setCaptchaEnabled] = useState(true)
   const [captchaSiteKey, setCaptchaSiteKey] = useState('')
   const [captchaStatus, setCaptchaStatus] = useState('CAPTCHA pendiente')
   const [mfaTicket, setMfaTicket] = useState(null)
@@ -248,11 +249,19 @@ function AuthScreen({ onAuth }) {
     api('/auth/captcha/site-key')
       .then(data => {
         if (!active) return
+        if (data.enabled === false) {
+          setCaptchaEnabled(false)
+          setCaptchaSiteKey('')
+          setCaptchaStatus('CAPTCHA desactivado')
+          return
+        }
+        setCaptchaEnabled(true)
         setCaptchaSiteKey(data.site_key)
       })
       .catch(err => {
         if (!active) return
         if (RECAPTCHA_SITE_KEY) {
+          setCaptchaEnabled(true)
           setCaptchaSiteKey(RECAPTCHA_SITE_KEY)
           setCaptchaStatus('Cargando CAPTCHA...')
           return
@@ -292,12 +301,18 @@ function AuthScreen({ onAuth }) {
     setError(message)
   }, [])
 
+  function withoutCaptcha(values) {
+    if (captchaEnabled) return values
+    const { captcha_token, ...payload } = values
+    return payload
+  }
+
   async function doLogin(e) {
     e.preventDefault()
     setError('')
     setApiLoginErrors({})
 
-    if (!login.captcha_token) {
+    if (captchaEnabled && !login.captcha_token) {
       setError('Marca la casilla No soy un robot antes de ingresar.')
       setCaptchaStatus('CAPTCHA requerido')
       return
@@ -305,7 +320,7 @@ function AuthScreen({ onAuth }) {
 
     setLoading(true)
     try {
-      const data = await api('/auth/login', { method: 'POST', body: JSON.stringify(login) })
+      const data = await api('/auth/login', { method: 'POST', body: JSON.stringify(withoutCaptcha(login)) })
       if (data.mfa_required) {
         setMfaTicket(data.ticket)
       } else {
@@ -314,7 +329,7 @@ function AuthScreen({ onAuth }) {
       }
     } catch (err) {
       setApiLoginErrors(firstApiErrors(err.payload?.errors))
-      resetCaptcha('CAPTCHA pendiente')
+      if (captchaEnabled) resetCaptcha('CAPTCHA pendiente')
       setError(err.message)
     } finally {
       setLoading(false)
@@ -354,7 +369,7 @@ function AuthScreen({ onAuth }) {
       return
     }
 
-    if (!register.captcha_token) {
+    if (captchaEnabled && !register.captcha_token) {
       setError('Marca la casilla No soy un robot antes de registrarte.')
       setCaptchaStatus('CAPTCHA requerido')
       return
@@ -362,12 +377,12 @@ function AuthScreen({ onAuth }) {
 
     setLoading(true)
     try {
-      await api('/auth/register', { method: 'POST', body: JSON.stringify(register) })
+      await api('/auth/register', { method: 'POST', body: JSON.stringify(withoutCaptcha(register)) })
       setLogin({ email: '', password: '', captcha_token: '' })
       switchMode('login')
     } catch (err) {
       setApiRegisterErrors(firstApiErrors(err.payload?.errors))
-      resetCaptcha('CAPTCHA pendiente')
+      if (captchaEnabled) resetCaptcha('CAPTCHA pendiente')
       setError(err.message)
     } finally {
       setLoading(false)
@@ -402,7 +417,7 @@ function AuthScreen({ onAuth }) {
         <input type="password" value={login.password} onChange={e => updateLogin('password', e.target.value)} required />
         <FieldError message={apiLoginErrors.password} />
       </label>
-      <div className="captcha-panel">
+      {captchaEnabled && <div className="captcha-panel">
         <span>{captchaStatus}</span>
         <CaptchaWidget
           key={captchaKey}
@@ -415,8 +430,8 @@ function AuthScreen({ onAuth }) {
         />
         <FieldError message={apiLoginErrors.captcha_token} />
         <button type="button" className="secondary" onClick={() => resetCaptcha()}>Reintentar CAPTCHA</button>
-      </div>
-      <button disabled={loading || !login.captcha_token}>Ingresar</button>
+      </div>}
+      <button disabled={loading || (captchaEnabled && !login.captcha_token)}>Ingresar</button>
     </form> : <form onSubmit={doRegister} className="form-grid" noValidate>
       <label>Nombre completo
         <input
@@ -477,7 +492,7 @@ function AuthScreen({ onAuth }) {
         <PasswordChecklist password={register.password} />
         <FieldError message={registerTouched.password && registerErrors.password} />
       </label>
-      <div className="captcha-panel">
+      {captchaEnabled && <div className="captcha-panel">
         <span>{captchaStatus}</span>
         <CaptchaWidget
           key={captchaKey}
@@ -490,8 +505,8 @@ function AuthScreen({ onAuth }) {
         />
         <FieldError message={apiRegisterErrors.captcha_token} />
         <button type="button" className="secondary" onClick={() => resetCaptcha()}>Reintentar CAPTCHA</button>
-      </div>
-      <button disabled={loading || !register.captcha_token}>Crear cuenta</button>
+      </div>}
+      <button disabled={loading || (captchaEnabled && !register.captcha_token)}>Crear cuenta</button>
     </form>}
   </main>
 }

@@ -22,8 +22,17 @@ class LoginRequest extends StrictFormRequest
         return [
             'email' => ['required', 'email', 'max:180'],
             'password' => ['required', 'string', 'max:200'],
-            'captcha_token' => ['required', 'string', 'max:4096', new Recaptcha()],
+            'captcha_token' => $this->captchaRules(),
             'g-recaptcha-response' => ['nullable', 'string', 'max:4096'],
         ];
+    }
+
+    private function captchaRules(): array
+    {
+        if (! (bool) config('services.recaptcha.enabled', true)) {
+            return ['nullable', 'string', 'max:4096'];
+        }
+
+        return ['required', 'string', 'max:4096', new Recaptcha()];
     }
 }

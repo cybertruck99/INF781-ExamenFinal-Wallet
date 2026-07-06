@@ -11,6 +11,10 @@ class Recaptcha implements ValidationRule
 {
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
+        if (! (bool) config('services.recaptcha.enabled', true)) {
+            return;
+        }
+
         if (! is_string($value) || trim($value) === '') {
             $fail('Completa el CAPTCHA.');
             return;
