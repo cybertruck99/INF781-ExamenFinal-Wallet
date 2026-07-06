@@ -8,7 +8,7 @@
   "variable": [
     {
       "key": "helpers",
-      "value": "\nfunction env(name, fallback) {\n  const value = pm.environment.get(name);\n  return value !== undefined && value !== null && String(value) !== '' ? value : fallback;\n}\nfunction setEnv(name, value) { pm.environment.set(name, value === undefined || value === null ? '' : value); }\nfunction baseUrl() { return env('baseUrl', 'http://127.0.0.1:8000/api/v1').replace(/[/]$/, ''); }\nfunction captchaToken() { return env('captchaToken', 'postman-test-captcha'); }\nfunction testRun() {\n  let id = pm.environment.get('postmanTestRun');\n  if (!id) {\n    id = 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2);\n    setEnv('postmanTestRun', id);\n  }\n  return id;\n}\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nfunction jsonOf(res) { try { return res.json(); } catch (e) { return {}; } }\nfunction requestHeaders(extra) {\n  return Object.assign({\n    Accept: 'application/json',\n    'Content-Type': 'application/json',\n    'X-Postman-Test-Run': testRun()\n  }, extra || {});\n}\nfunction failSetup(message, res) {\n  const detail = res ? (' HTTP ' + res.code + ' ' + res.text()) : '';\n  throw new Error(message + detail);\n}\nfunction clearNewSession() {\n  ['newUserAccessToken', 'newUserRefreshToken', 'newUserUuid', 'newUserMfaEnabled', 'transfer300Uuid', 'pendingLargeTransferUuid', 'foreignTransferUuid', 'oldRefreshToken', 'rotatedRefreshToken'].forEach(function (key) { setEnv(key, ''); });\n}\nfunction loginWithCredentials(email, password, accessVar, refreshVar, cb) {\n  pm.sendRequest({\n    url: baseUrl() + '/auth/login',\n    method: 'POST',\n    header: requestHeaders(),\n    body: { mode: 'raw', raw: JSON.stringify({ email: email, password: password, captcha_token: captchaToken() }) }\n  }, function (err, res) {\n    if (err || !res) return failSetup('No se pudo iniciar sesion.', res);\n    const data = jsonOf(res);\n    if (data.mfa_required) return failSetup('MFA activado no se puede realizar esta prueba.', res);\n    if (res.code !== 200 || !data.tokens || !data.tokens.access_token || !data.tokens.refresh_token) return failSetup('No se pudo iniciar sesion.', res);\n    setEnv(accessVar, data.tokens.access_token);\n    setEnv(refreshVar, data.tokens.refresh_token);\n    if (cb) cb(data.tokens, data.user);\n  });\n}\nfunction loginNew(cb) {\n  loginWithCredentials(env('newUserEmail', 'nuevousuario@gmail.com'), env('newUserPassword', 'NuevoUsuario_123'), 'newUserAccessToken', 'newUserRefreshToken', cb);\n}\nfunction ensureNew(cb) {\n  const token = pm.environment.get('newUserAccessToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginNew(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction loginAdmin(cb) {\n  loginWithCredentials(env('adminEmail', 'admin@securewallet.test'), env('adminPassword', 'Admin123*Secure'), 'adminToken', 'adminRefreshToken', cb);\n}\nfunction ensureAdmin(cb) {\n  const token = pm.environment.get('adminToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginAdmin(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction assertNoSecrets(text) {\n  const lower = (text || '').toLowerCase();\n  ['password', 'password_hash', 'mfa_secret', 'totp_secret', 'refresh_token', 'access_token', 'token_hash'].forEach(function (term) {\n    pm.expect(lower, 'No debe contener ' + term).to.not.include(term);\n  });\n}\nfunction exactNewEmail(user) { return user && String(user.email || '').toLowerCase() === env('newUserEmail', 'nuevousuario@gmail.com').toLowerCase(); }\n",
+      "value": "\nfunction env(name, fallback) {\n  const value = pm.environment.get(name);\n  return value !== undefined && value !== null && String(value) !== '' ? value : fallback;\n}\nfunction setEnv(name, value) { pm.environment.set(name, value === undefined || value === null ? '' : value); }\nfunction baseUrl() { return env('baseUrl', 'http://127.0.0.1:8000/api/v1').replace(/[/]$/, ''); }\nfunction captchaToken() { return env('captchaToken', 'postman-test-captcha'); }\nfunction testRun() {\n  let id = pm.environment.get('postmanTestRun');\n  if (!id) {\n    id = 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2);\n    setEnv('postmanTestRun', id);\n  }\n  return id;\n}\nfunction uuidv4() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\nfunction jsonOf(res) { try { return res.json(); } catch (e) { return {}; } }\nfunction requestHeaders(extra) {\n  return Object.assign({\n    Accept: 'application/json',\n    'Content-Type': 'application/json',\n    'X-Postman-Test-Run': testRun()\n  }, extra || {});\n}\nfunction failSetup(message, res) {\n  const detail = res ? (' HTTP ' + res.code + ' ' + res.text()) : '';\n  throw new Error(message + detail);\n}\nfunction clearNewSession() {\n  ['newUserAccessToken', 'newUserRefreshToken', 'newUserUuid', 'newUserMfaEnabled', 'transfer300Uuid', 'pendingLargeTransferUuid', 'foreignTransferUuid', 'oldRefreshToken', 'rotatedRefreshToken'].forEach(function (key) { setEnv(key, ''); });\n}\nfunction loginWithCredentials(email, password, accessVar, refreshVar, cb) {\n  pm.sendRequest({\n    url: baseUrl() + '/auth/login',\n    method: 'POST',\n    header: requestHeaders(),\n    body: { mode: 'raw', raw: JSON.stringify({ email: email, password: password, captcha_token: captchaToken() }) }\n  }, function (err, res) {\n    if (err || !res) return failSetup('No se pudo iniciar sesion.', res);\n    const data = jsonOf(res);\n    if (data.mfa_required) return failSetup('MFA activado no se puede realizar esta prueba.', res);\n    if (res.code !== 200 || !data.tokens || !data.tokens.access_token || !data.tokens.refresh_token) return failSetup('No se pudo iniciar sesion.', res);\n    setEnv(accessVar, data.tokens.access_token);\n    setEnv(refreshVar, data.tokens.refresh_token);\n    if (cb) cb(data.tokens, data.user);\n  });\n}\nfunction loginNew(cb) {\n  loginWithCredentials(env('newUserEmail', 'nuevousuario@gmail.com'), env('newUserPassword', 'NuevoUsuario_123'), 'newUserAccessToken', 'newUserRefreshToken', cb);\n}\nfunction ensureNew(cb) {\n  const token = pm.environment.get('newUserAccessToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginNew(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction loginAdmin(cb) {\n  loginWithCredentials(env('adminEmail', 'admin@securewallet.test'), env('adminPassword', 'Admin123*Secure'), 'adminToken', 'adminRefreshToken', cb);\n}\nfunction ensureAdmin(cb) {\n  const token = pm.environment.get('adminToken');\n  if (token) return cb ? cb(token) : undefined;\n  loginAdmin(function (tokens) { if (cb) cb(tokens.access_token); });\n}\nfunction assertNoSecrets(text) {\n  const lower = (text || '').toLowerCase();\n  ['password', 'password_hash', 'mfa_secret', 'totp_secret', 'refresh_token', 'access_token', 'token_hash'].forEach(function (term) {\n    pm.expect(lower, 'No debe contener ' + term).to.not.include(term);\n  });\n}\nfunction exactNewEmail(user) { return user && String(user.email || '').toLowerCase() === env('newUserEmail', 'nuevousuario@gmail.com').toLowerCase(); }\n\nfunction ensureParte5Defaults() {\n  const defaults = {\n    baseUrl: 'http://127.0.0.1:8000/api/v1',\n    captchaToken: 'postman-test-captcha',\n    newUserName: 'Nuevo Usuario',\n    newUserEmail: 'nuevousuario@gmail.com',\n    newUserPassword: 'NuevoUsuario_123',\n    newUserCi: '2000001',\n    newUserPhone: '79990001',\n    userEmail: 'manuel123@gmail.com',\n    userPassword: 'Manuel_123',\n    adminEmail: 'admin@securewallet.test',\n    adminPassword: 'Admin123*Secure',\n    totpCode: ''\n  };\n  Object.keys(defaults).forEach(function (key) {\n    const value = pm.environment.get(key);\n    if (value === undefined || value === null || String(value) === '') setEnv(key, defaults[key]);\n  });\n}\n",
       "type": "string"
     }
   ],
@@ -25,6 +25,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "clearNewSession();",
                   "setEnv('postmanTestRun', 'parte5-' + Date.now() + '-' + Math.random().toString(16).slice(2));",
                   "loginAdmin(function (tokens) {",
@@ -59,6 +60,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Nuevo Usuario se crea con 201', function () { pm.expect(pm.response.code).to.eql(201); });",
                   "pm.test('Nuevo Usuario reemplazado y sin secretos', function () {",
                   "  const json = pm.response.json();",
@@ -120,6 +122,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Login Nuevo Usuario responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
                   "pm.test('Login Nuevo Usuario entrega access y refresh token', function () {",
                   "  const json = pm.response.json();",
@@ -183,6 +186,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -255,6 +259,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "setEnv('idempotencyKey', uuidv4());",
                   "ensureNew();"
                 ]
@@ -266,6 +271,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Transferencia 300 se crea pendiente', function () {",
                   "  pm.expect(pm.response.code).to.eql(201);",
                   "  const json = pm.response.json();",
@@ -347,6 +353,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "setEnv('idempotencyKey', uuidv4());",
                   "ensureNew();"
                 ]
@@ -358,6 +365,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Transferencia 800 se crea pendiente y requiere TOTP', function () {",
                   "  pm.expect(pm.response.code).to.eql(201);",
                   "  const json = pm.response.json();",
@@ -438,6 +446,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -448,6 +457,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Perfil responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
                   "pm.test('Estado MFA se guarda y se muestra', function () {",
                   "  const enabled = Boolean(pm.response.json().user.mfa_enabled);",
@@ -503,6 +513,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "setEnv('idempotencyKey', uuidv4());",
                   "ensureNew();"
                 ]
@@ -581,6 +592,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -658,6 +670,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew(function () {",
                   "  ensureAdmin(function (adminToken) {",
                   "    pm.sendRequest({",
@@ -753,6 +766,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -812,6 +826,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -822,6 +837,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('RS-03 /me responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
                   "pm.test('RS-03 no expone secretos ni tokens', function () { assertNoSecrets(pm.response.text()); });"
                 ]
@@ -872,6 +888,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -944,6 +961,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "setEnv('idempotencyKey', uuidv4());",
                   "ensureNew();"
                 ]
@@ -955,6 +973,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('RS-05 primera respuesta 201', function () { pm.expect(pm.response.code).to.eql(201); });",
                   "pm.test('RS-05 repetida devuelve mismo uuid', function (done) {",
                   "  const firstUuid = pm.response.json().uuid;",
@@ -1078,6 +1097,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();",
                   "setEnv('oldRefreshToken', env('newUserRefreshToken', ''));"
                 ]
@@ -1089,6 +1109,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('RS-07 primer refresh responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
                   "pm.test('RS-07 reusar refresh viejo responde 401 sin tokens', function (done) {",
                   "  const json = pm.response.json();",
@@ -1163,6 +1184,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "setEnv('rateLimitEmail', 'ratelimit-nuevo-' + Date.now() + '@gmail.com');"
                 ]
               }
@@ -1173,6 +1195,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('RS-08 sexto intento responde 429', function (done) {",
                   "  const badBody = JSON.stringify({ email: env('rateLimitEmail', ''), password: 'Password_erronea_123!', captcha_token: captchaToken() });",
                   "  let count = 1;",
@@ -1243,6 +1266,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();",
                   "ensureAdmin();"
                 ]
@@ -1254,6 +1278,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('RS-09 Nuevo Usuario recibe 403 en auditoria', function () { pm.expect(pm.response.code).to.eql(403); });",
                   "pm.test('RS-09 ADMIN consulta auditoria con trazabilidad', function (done) {",
                   "  pm.sendRequest({",
@@ -1360,6 +1385,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "ensureNew();"
                 ]
               }
@@ -1370,6 +1396,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "eval(pm.collectionVariables.get('helpers'));",
+                  "ensureParte5Defaults();",
                   "pm.test('Logout Nuevo Usuario responde 200', function () { pm.expect(pm.response.code).to.eql(200); });",
                   "clearNewSession();"
                 ]
